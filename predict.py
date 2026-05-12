@@ -30,16 +30,15 @@ class Predictor(BasePredictor):
         self.tokenizer = AutoTokenizer.from_pretrained(
             MODEL_PATH,
             trust_remote_code=True,
-            local_files_only=True,
         )
         print(f"[setup] tokenizer OK (t={time.time()-t0:.1f}s)", flush=True)
 
-        print(f"[setup] loading model (trust_remote_code, attn=sdpa)... (t={time.time()-t0:.1f}s)", flush=True)
+        print(f"[setup] loading model (trust_remote_code, attn=eager)... (t={time.time()-t0:.1f}s)", flush=True)
+        # Removido local_files_only e _attn_implementation — offline mode já garantido via env vars.
+        # eager attention é mais compatível com custom code models (sdpa pode falhar em algumas arquiteturas custom).
         self.model = AutoModel.from_pretrained(
             MODEL_PATH,
             trust_remote_code=True,
-            local_files_only=True,
-            _attn_implementation="sdpa",  # built-in PyTorch (sem flash-attn)
             use_safetensors=True,
         )
         self.model = self.model.eval()
