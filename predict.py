@@ -1,7 +1,9 @@
+import io
 import os
 import shutil
 import tempfile
 import time
+from contextlib import redirect_stdout
 
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -82,22 +84,28 @@ class Predictor(BasePredictor):
         else:
             prompt = custom_prompt or PROMPT_FREE_OCR
 
-        # Cria diretório temporário pra resultados (o model.infer salva aqui se save_results=True)
+        # O model.infer() do DeepSeek-OCR-2 imprime o resultado no stdout e retorna None.
+        # Capturamos o stdout durante a chamada pra devolver como resposta.
         tmp_out = tempfile.mkdtemp(prefix="dsocr_")
+        captured = io.StringIO()
         try:
-            result = self.model.infer(
-                self.tokenizer,
-                prompt=prompt,
-                image_file=str(image),
-                output_path=tmp_out,
-                base_size=base_size,
-                image_size=image_size,
-                crop_mode=crop_mode,
-                save_results=False,
-            )
-            # result deve ser string com o texto extraído
-            if isinstance(result, str):
-                return result
-            return str(result)
+            with redirect_stdout(captured):
+                self.model.infer(
+                    self.tokenizer,
+                    prompt=prompt,
+                    image_file=str(image),
+                    output_path=tmp_out,
+                    base_size=base_size,
+                    image_size=image_size,
+                    crop_mode=crop_mode,
+                    save_results=True,
+                )
+            text = captured.getvalue().strip()
+            # Remove o cabeçalho de debug "BASE:/PATCHES:" do output, se presente
+            if "=====================" in text:
+                parts = text.split("=====================")
+                if len(parts) >= 3:
+                    text = "=====================".join(parts[2:]).strip()
+            return text or "(modelo não retornou texto — imagem pode não conter texto legível)"
         finally:
             shutil.rmtree(tmp_out, ignore_errors=True)
